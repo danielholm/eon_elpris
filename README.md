@@ -22,3 +22,23 @@ Install via HACS → Custom repository.
 Then add the integration via:
 
 Settings → Devices & Services → Add Integration → E.ON Monthly Electricity Price
+
+## Alternative 
+
+You can just create a template sensor:
+```
+sensor:
+  - platform: rest
+    name: eon_manadspris_se3
+    resource: https://eonepapirun.azurewebsites.net/api/getSpotpricesAverage
+    value_template: >
+      {{
+        value_json.MonthlyAveragePrice
+        | selectattr('PriceArea','eq','SE3')
+        | map(attribute='Price')
+        | first
+      }}
+    unit_of_measurement: "öre/kWh"
+    scan_interval: 3600
+```
+change to your electric area.
