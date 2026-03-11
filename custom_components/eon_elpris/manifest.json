@@ -1,0 +1,10 @@
+{
+  "domain": "eon_elpris",
+  "name": "E.ON Monthly Electricity Price",
+  "version": "1.0",
+  "config_flow": true,
+  "documentation": "https://github.com/danielholm/eon_elpris",
+  "requirements": [],
+  "codeowners": ["danielholm"],
+  "iot_class": "cloud_polling"
+}
