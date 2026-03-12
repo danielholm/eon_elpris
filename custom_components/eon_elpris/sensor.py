@@ -1,13 +1,13 @@
 import logging
 from datetime import timedelta
 
-import aiohttp
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
+    UpdateFailed,
 )
 from homeassistant.helpers.device_registry import DeviceInfo
 
@@ -22,9 +22,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     async def async_update_data():
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(API_URL, timeout=10) as resp:
-                    data = await resp.json()
+            session = async_get_clientsession(hass)
+
+            async with session.get(API_URL, timeout=10) as resp:
+                data = await resp.json(content_type=None)
 
             for area_data in data["MonthlyAveragePrice"]:
                 if area_data["PriceArea"] == area:
@@ -33,7 +34,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             raise ValueError("Price area not found")
 
         except Exception as err:
-            raise ConfigEntryNotReady from err
+            raise UpdateFailed(err)
 
     coordinator = DataUpdateCoordinator(
         hass,
@@ -60,7 +61,7 @@ class EonPriceSensor(CoordinatorEntity, SensorEntity):
 
         self._attr_has_entity_name = True
 
-        self._attr_name = f"E.ON Monthly Price {area}"
+        self._attr_name = "Monthly Price"
         self._attr_unique_id = f"eon_price_{area}_{unit}"
         self._attr_native_unit_of_measurement = UNITS[unit]
         self._attr_suggested_display_precision = 3
