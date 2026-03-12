@@ -1,34 +1,39 @@
-import aiohttp
+import logging
 from datetime import timedelta
+
+import aiohttp
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.update_coordinator import (
+    CoordinatorEntity,
     DataUpdateCoordinator,
-    CoordinatorEntity
 )
+from homeassistant.helpers.device_registry import DeviceInfo
 
-from .const import DOMAIN, API_URL, UNITS
+from .const import API_URL, DOMAIN, UNITS
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-
     area = entry.data["area"]
     unit = entry.data["unit"]
 
     async def async_update_data():
-
         async with aiohttp.ClientSession() as session:
             async with session.get(API_URL) as resp:
                 data = await resp.json()
 
         for area_data in data["MonthlyAveragePrice"]:
             if area_data["PriceArea"] == area:
-                return area_data["Price"], data
+                return {"price": area_data["Price"], "raw": data}
+
+        raise ValueError(f"Kunde inte hitta prisområde {area} i API-svaret")
 
     coordinator = DataUpdateCoordinator(
         hass,
-        logger=hass.logger,
-        name="eon_price",
+        logger=_LOGGER,
+        name=f"eon_price_{area}",
         update_method=async_update_data,
         update_interval=timedelta(hours=1),
     )
@@ -39,7 +44,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class EonPriceSensor(CoordinatorEntity, SensorEntity):
-
     def __init__(self, coordinator, area, unit):
         super().__init__(coordinator)
 
@@ -47,15 +51,21 @@ class EonPriceSensor(CoordinatorEntity, SensorEntity):
         self._unit = unit
 
         self._attr_name = f"E.ON Monthly Price {area}"
-        self._attr_unique_id = f"eon_price_{area}"
-
+        self._attr_unique_id = f"eon_price_{area}_{unit}"
         self._attr_native_unit_of_measurement = UNITS[unit]
         self._attr_suggested_display_precision = 3
+        self._attr_state_class = "measurement"
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, area)},
+            name=f"E.ON Electricity Price {area}",
+            manufacturer="E.ON",
+            model="Monthly Average Electricity Price",
+        )
 
     @property
     def native_value(self):
-
-        price, _ = self.coordinator.data
+        price = self.coordinator.data["price"]
 
         if self._unit == "sek":
             return round(price / 100, 4)
@@ -64,12 +74,11 @@ class EonPriceSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self):
-
-        _, data = self.coordinator.data
+        data = self.coordinator.data["raw"]
 
         return {
             "month": data["Month"],
             "valid_from": data["FromDate"],
             "valid_to": data["ToDate"],
-            "updated": data["Timestamp"]
+            "updated": data["Timestamp"],
         }
