@@ -48,7 +48,6 @@ class EonPriceSensor(CoordinatorEntity, SensorEntity):
 
         self._attr_name = f"E.ON Monthly Price {area}"
         self._attr_native_unit_of_measurement = UNITS[unit]
-        self._attr_device_class = "monetary"
 
     @property
     def native_value(self):
