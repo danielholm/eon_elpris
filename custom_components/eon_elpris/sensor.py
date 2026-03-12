@@ -3,6 +3,7 @@ from datetime import timedelta
 
 import aiohttp
 
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
@@ -20,19 +21,23 @@ async def async_setup_entry(hass, entry, async_add_entities):
     unit = entry.data["unit"]
 
     async def async_update_data():
-        async with aiohttp.ClientSession() as session:
-            async with session.get(API_URL) as resp:
-                data = await resp.json()
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(API_URL, timeout=10) as resp:
+                    data = await resp.json()
 
-        for area_data in data["MonthlyAveragePrice"]:
-            if area_data["PriceArea"] == area:
-                return {"price": area_data["Price"], "raw": data}
+            for area_data in data["MonthlyAveragePrice"]:
+                if area_data["PriceArea"] == area:
+                    return {"price": area_data["Price"], "raw": data}
 
-        raise ValueError(f"Kunde inte hitta prisområde {area} i API-svaret")
+            raise ValueError("Price area not found")
+
+        except Exception as err:
+            raise ConfigEntryNotReady from err
 
     coordinator = DataUpdateCoordinator(
         hass,
-        logger=_LOGGER,
+        _LOGGER,
         name=f"eon_price_{area}",
         update_method=async_update_data,
         update_interval=timedelta(hours=1),
@@ -43,12 +48,17 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities([EonPriceSensor(coordinator, area, unit)])
 
 
+
 class EonPriceSensor(CoordinatorEntity, SensorEntity):
+    _attr_should_poll = False
+
     def __init__(self, coordinator, area, unit):
         super().__init__(coordinator)
 
         self._area = area
         self._unit = unit
+
+        self._attr_has_entity_name = True
 
         self._attr_name = f"E.ON Monthly Price {area}"
         self._attr_unique_id = f"eon_price_{area}_{unit}"
